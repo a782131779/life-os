@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Life OS">
+    
+    <title>Life OS V5.3 (iOS版)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌌</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌌</text></svg>">
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 针对 iPhone 刘海屏的优化 */
+        .safe-top { padding-top: env(safe-area-inset-top); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .list-move, .list-enter-active, .list-leave-active { transition: all 0.4s ease; }
+        .list-enter-from, .list-leave-to { opacity: 0; transform: translateX(20px); }
+        .list-leave-active { position: absolute; }
+        @keyframes breathe { 0% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); } 50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.6); } 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); } }
+        .focus-breathing { animation: breathe 3s infinite ease-in-out; }
+    </style>
+</head>
+<body class="safe-top safe-bottom">
+
+<div id="app" class="max-w-md mx-auto min-h-screen flex flex-col relative bg-slate-50">
+    
+    <header class="bg-white p-4 shadow-sm sticky top-0 z-20">
+        <div class="flex justify-between items-center mb-3">
+            <h1 class="text-xl font-black text-slate-800 tracking-tight">LIFE OS <span class="text-[10px] text-white bg-indigo-600 px-1.5 py-0.5 rounded-full align-middle">iOS</span></h1>
+            <div class="flex items-center bg-slate-100 rounded-full px-3 py-1">
+                <input type="date" v-model="currentDateStr" class="bg-transparent border-none text-xs font-bold text-gray-700 focus:outline-none w-24">
+            </div>
+        </div>
+        
+        <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar mb-3">
+            <div v-for="habit in habits" :key="habit.id" @click="toggleHabit(habit)"
+                 :class="isHabitDoneToday(habit) ? 'bg-emerald-100 border-emerald-300' : 'bg-white border-gray-200'"
+                 class="flex items-center gap-1 px-3 py-1.5 rounded-full border shadow-sm flex-shrink-0 transition-all active:scale-95">
+                <span class="text-sm">{{ habit.icon }}</span><span :class="isHabitDoneToday(habit) ? 'text-emerald-700 font-bold' : 'text-gray-500'" class="text-xs">{{ habit.name }}</span>
+            </div>
+            <button @click="showAddHabit = true" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0 active:bg-slate-200">+</button>
+        </div>
+
+        <div class="flex bg-slate-100 p-1 rounded-lg justify-between">
+            <button v-for="tab in tabs" :key="tab.id" @click="currentTab = tab.id"
+                :class="currentTab === tab.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400'"
+                class="flex-1 py-1.5 rounded-md text-xs font-bold transition-all text-center">{{ tab.name }}</button>
+        </div>
+    </header>
+
+    <transition name="fade">
+        <div v-if="focusMode.active" class="fixed inset-0 bg-slate-900 z-50 flex flex-col items-center justify-center text-white focus-breathing safe-top safe-bottom p-4">
+            <div class="text-slate-400 mb-8 text-sm">正在专注</div>
+            <h2 class="text-3xl font-bold mb-10 text-center leading-tight">{{ focusMode.taskName }}</h2>
+            <div class="text-8xl font-mono tabular-nums text-indigo-400 mb-12">{{ formatTime(focusMode.timeLeft) }}</div>
+            <div class="w-full grid grid-cols-2 gap-4">
+                <button @click="stopFocus(false)" class="w-full py-4 rounded-2xl border border-slate-600 text-slate-400 active:bg-slate-800">暂停</button>
+                <button @click="stopFocus(true)" class="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold shadow-lg active:scale-95">完成</button>
+            </div>
+        </div>
+    </transition>
+
+    <div v-if="currentTab === 'schedule'" class="flex-1 p-4 space-y-4 overflow-y-auto pb-24">
+        
+        <div class="bg-white p-3 rounded-xl shadow-sm border-l-4 border-blue-400">
+             <div @click="showSleepSettings = !showSleepSettings" class="flex justify-between items-center">
+                <h2 class="font-bold text-gray-800 text-sm">🛌 作息设置</h2>
+                <span class="text-xs text-gray-400">{{ showSleepSettings ? '收起' : '设置' }}</span>
+            </div>
+            <div v-if="showSleepSettings" class="grid grid-cols-2 gap-3 mt-3">
+                <div class="bg-blue-50 p-2 rounded-lg">
+                    <label class="text-[10px] text-blue-500 font-bold block">昨晚睡</label>
+                    <input type="time" v-model="sleepSettings.start" class="w-full text-sm bg-transparent border-none p-0 focus:ring-0">
+                </div>
+                <div class="bg-blue-50 p-2 rounded-lg">
+                    <label class="text-[10px] text-blue-500 font-bold block">今早起</label>
+                    <input type="time" v-model="sleepSettings.end" class="w-full text-sm bg-transparent border-none p-0 focus:ring-0">
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm">
+            <h2 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center" @click="showInput = !showInput">
+                <span>🚀 添加任务</span>
+                <span class="text-indigo-600 text-xs">{{ showInput ? '取消' : '+ 新建' }}</span>
+            </h2>
+            <div v-if="showInput" class="space-y-3">
+                <input v-model="newTodo.name" type="text" placeholder="做什么？" class="w-full p-3 bg-slate-50 rounded-lg text-sm outline-none border focus:border-indigo-300">
+                <div class="flex gap-2">
+                    <select v-model="newTodo.category" class="w-1/2 p-2 bg-slate-50 rounded-lg text-xs outline-none border">
+                        <option v-for="cat in categories" :value="cat">{{ cat }}</option>
+                    </select>
+                     <select v-model.number="newTodo.buffer" class="w-1/2 p-2 bg-slate-50 rounded-lg text-xs outline-none border">
+                        <option :value="0">无准备</option><option :value="15">15m准备</option><option :value="30">30m准备</option><option :value="60">1h准备</option>
+                    </select>
+                </div>
+                <div class="bg-slate-50 p-2 rounded-lg flex justify-between items-center">
+                    <span class="text-xs text-gray-500">模式</span>
+                    <div class="flex bg-white rounded p-0.5 border">
+                        <button @click="timeMode = 'auto'" :class="timeMode==='auto'?'bg-indigo-600 text-white':'text-gray-400'" class="px-3 py-1 text-xs rounded transition">自动</button>
+                        <button @click="timeMode = 'fixed'" :class="timeMode==='fixed'?'bg-indigo-600 text-white':'text-gray-400'" class="px-3 py-1 text-xs rounded transition">定点</button>
+                    </div>
+                </div>
+                <div v-if="timeMode === 'auto'">
+                    <input v-model.number="newTodo.duration" type="number" step="0.5" placeholder="预计几小时？" class="w-full p-2 border rounded-lg text-sm">
+                </div>
+                <div v-else class="flex gap-2 items-center">
+                    <input v-model="newTodo.fixedStart" type="time" class="w-1/2 p-2 border rounded-lg text-sm">
+                    <span class="text-gray-400">-</span>
+                    <input v-model="newTodo.fixedEnd" type="time" class="w-1/2 p-2 border rounded-lg text-sm">
+                </div>
+
+                <button @click="addTodo" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">确认添加</button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4" v-if="todos.length > 0">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">待办池 ({{ todos.length }})</h3>
+            <ul class="space-y-2">
+                <li v-for="todo in sortedTodos" :key="todo.id" class="bg-white border border-slate-100 rounded-lg p-3 shadow-sm flex justify-between items-center">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{{ todo.category }}</span>
+                            <span class="font-bold text-gray-700 text-sm">{{ todo.name }}</span>
+                        </div>
+                        <div class="text-[10px] text-gray-400 mt-1">
+                             <span v-if="todo.fixedStart">⏰ {{todo.fixedStart}}-{{todo.fixedEnd}}</span>
+                             <span v-else>⏳ {{ todo.duration }}h</span>
+                             <span v-if="todo.buffer > 0" class="ml-1 text-orange-400">🛡️{{todo.buffer}}m</span>
+                        </div>
+                    </div>
+                    <button @click="removeTodo(todo.id)" class="text-gray-300 px-2 py-1">×</button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-lg relative min-h-[400px]">
+            <h2 class="font-black text-slate-800 text-lg mb-4 flex justify-between items-center">
+                今日安排
+                <span class="text-[10px] font-normal text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">空闲 {{ totalFreeTime }}h</span>
+            </h2>
+            <div class="relative pl-8 border-l-2 border-slate-100 space-y-4">
+                <div v-for="(item, index) in computedSchedule" :key="index" class="relative group">
+                    <div class="absolute -left-10 top-0 text-[10px] font-bold text-gray-400 w-8 text-right font-mono">{{ item.startTime }}</div>
+                    
+                    <div v-if="item.isBuffer" class="p-2 mb-1 rounded bg-orange-50 border border-orange-100 text-[10px] text-orange-400">
+                         🛡️ 准备: {{item.forTask}}
+                    </div>
+                    <div v-else :class="['p-3 rounded-xl border-l-4 shadow-sm relative z-10', item.type === 'FIXED' ? 'bg-slate-50 border-slate-300' : item.type === 'TODO' ? (item.isUrgent ? 'bg-red-50 border-red-500' : 'bg-indigo-50 border-indigo-500') : 'bg-white border-dashed border-gray-200']">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm">{{ item.name }}</h3>
+                                <p class="text-[10px] text-gray-400 mt-1">{{ item.startTime }} - {{ item.endTime }}</p>
+                            </div>
+                            <div v-if="item.type === 'TODO'" class="flex gap-2">
+                                <button @click="startFocusFromSchedule(item)" class="text-[10px] bg-indigo-600 text-white px-2 py-1 rounded shadow active:bg-indigo-800">专注</button>
+                                <button @click="completeTaskFromSchedule(item)" class="text-[10px] border border-emerald-500 text-emerald-600 px-2 py-1 rounded active:bg-emerald-50">✔</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-else-if="currentTab === 'wishlist'" class="flex-1 p-4 space-y-4 pb-24 overflow-y-auto">
+        <div class="bg-gradient-to-r from-pink-500 to-rose-400 text-white p-6 rounded-2xl shadow-lg mb-4">
+            <h2 class="text-xl font-bold">✨ 愿望清单</h2>
+        </div>
+        <div class="flex gap-2 mb-4">
+            <input v-model="newWish.name" class="flex-1 p-3 border rounded-xl text-sm" placeholder="想做什么？">
+            <button @click="addWish" class="bg-pink-500 text-white px-4 rounded-xl font-bold">添加</button>
+        </div>
+        <div v-for="cat in uniqueCategories" :key="cat" class="bg-white p-4 rounded-xl shadow-sm">
+            <h3 class="font-bold text-gray-600 text-sm border-b pb-2 mb-2">{{ cat }}</h3>
+            <div v-if="getWishesByCategory(cat).length === 0" class="text-center text-xs text-gray-300 py-2">空</div>
+            <ul class="space-y-2">
+                <li v-for="wish in getWishesByCategory(cat)" :key="wish.id" class="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg">
+                    <span>{{ wish.name }}</span>
+                    <button @click="promoteToTodo(wish)" class="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-1 rounded">📅</button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div v-else-if="currentTab === 'review'" class="flex-1 p-4 space-y-4 pb-24 overflow-y-auto">
+         <div class="grid grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border-b-4 border-indigo-500"><div class="text-gray-400 text-[10px] font-bold uppercase">Total Hours</div><div class="text-2xl font-black text-indigo-800">{{ stats.totalHours }}h</div></div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border-b-4 border-emerald-500"><div class="text-gray-400 text-[10px] font-bold uppercase">Done</div><div class="text-2xl font-black text-emerald-800">{{ stats.totalTasks }}</div></div>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm"><h3 class="font-bold text-gray-700 mb-2 text-sm">时间分布</h3><div class="h-48 flex justify-center"><canvas id="categoryChart"></canvas></div></div>
+        <div class="bg-white p-4 rounded-xl shadow-sm"><h3 class="font-bold text-gray-700 mb-2 text-sm">近7天趋势</h3><div class="h-48"><canvas id="trendChart"></canvas></div></div>
+    </div>
+    
+    <div v-else-if="currentTab === 'settings'" class="flex-1 p-4">
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="font-bold text-lg mb-4">设置</h2>
+            <div class="space-y-4">
+                <button @click="exportData" class="w-full bg-slate-800 text-white py-3 rounded-xl">📤 备份数据</button>
+                 <div class="relative w-full">
+                    <button class="w-full bg-slate-100 text-slate-600 py-3 rounded-xl">📥 恢复数据</button>
+                    <input type="file" @change="importData" class="absolute inset-0 opacity-0 w-full h-full">
+                </div>
+                <button @click="resetData" class="w-full text-red-500 py-3 text-sm">清空所有数据</button>
+            </div>
+            
+            <div class="mt-8 border-t pt-4">
+                <h3 class="font-bold text-sm mb-2">固定日程管理</h3>
+                <div class="bg-slate-50 p-3 rounded-lg mb-2">
+                    <input v-model="newFixed.name" placeholder="任务名 (如:打工)" class="w-full text-sm bg-white p-2 rounded mb-2 border">
+                    <div class="flex gap-2 mb-2">
+                        <input v-model="newFixed.start" type="time" class="w-1/2 p-2 bg-white rounded text-sm border">
+                        <input v-model="newFixed.end" type="time" class="w-1/2 p-2 bg-white rounded text-sm border">
+                    </div>
+                    <div class="flex justify-between px-1 mb-2">
+                        <span v-for="(day, idx) in weekDays" :key="idx" @click="toggleFixedDay(idx)"
+                                :class="newFixed.days.includes(idx) ? 'bg-indigo-600 text-white' : 'bg-white text-gray-400'"
+                                class="w-7 h-7 rounded-full flex items-center justify-center text-xs border cursor-pointer">{{ day }}</span>
+                    </div>
+                    <button @click="addFixedTask" class="w-full bg-indigo-600 text-white text-xs py-2 rounded">添加</button>
+                </div>
+                <ul class="space-y-2">
+                    <li v-for="(task, index) in fixedTasks" :key="index" class="text-xs bg-white border p-2 rounded flex justify-between">
+                        <div><div class="font-bold">{{ task.name }}</div><div class="text-gray-400">{{ task.start }}-{{ task.end }} [{{ formatDays(task.days) }}]</div></div>
+                        <button @click="removeFixed(index)" class="text-red-400">×</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="h-16"></div>
+
+    <div v-if="showAddHabit" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl">
+            <h3 class="font-bold mb-4 text-lg">添加新习惯</h3>
+            <input v-model="newHabit.name" placeholder="名称 (如: 喝水)" class="w-full border-b-2 p-2 mb-4 outline-none focus:border-indigo-500 text-lg">
+            <input v-model="newHabit.icon" placeholder="图标 (Emoji)" class="w-full border-b-2 p-2 mb-6 outline-none focus:border-indigo-500 text-lg">
+            <div class="flex justify-end gap-4">
+                <button @click="showAddHabit = false" class="text-gray-500 px-4 py-2">取消</button>
+                <button @click="addHabit" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold">确定</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        data() {
+            return {
+                tabs: [{ id: 'schedule', name: '日程' }, { id: 'wishlist', name: '愿望' }, { id: 'review', name: '复盘' }, { id: 'settings', name: '设置' }],
+                currentTab: 'schedule',
+                currentDateStr: new Date().toISOString().split('T')[0],
+                weekDays: ['日', '一', '二', '三', '四', '五', '六'],
+                sortBy: '智能',
+                
+                showInput: false, // 手机端默认折叠输入框
+                showSleepSettings: false,
+                showAddHabit: false,
+                focusMode: { active: false, taskName: '', timeLeft: 0, timer: null },
+                timeMode: 'auto',
+                
+                categories: ['🎓 研究', '💼 打工', '🏠 生活', '🎮 娱乐'],
+                
+                newTodo: { name: '', category: '🎓 研究', duration: 2, buffer: 0, deadline: '', subtasks: [], fixedStart: '', fixedEnd: '' },
+                newFixed: { name: '', start: '', end: '', buffer: 0, days: [] },
+                newHabit: { name: '', icon: '' },
+                newWish: { name: '', category: '🎬 电影/剧集' },
+                sleepSettings: { start: '23:30', end: '08:30' },
+                
+                fixedTasks: [], todos: [], habits: [], wishlist: [], history: []
+            }
+        },
+        mounted() { this.loadData(); },
+        watch: { '$data': { handler() { this.saveData(); }, deep: true }, currentTab(val) { if(val === 'review') setTimeout(this.renderCharts, 100); } },
+        computed: {
+            currentWeekDayStr() { const d = new Date(this.currentDateStr); return '周' + this.weekDays[d.getDay()]; },
+            uniqueCategories() { return ['🎬 电影/剧集', '📚 书籍', '✈️ 旅行/打卡', '🎁 想要好物', '💡 长期目标']; },
+            sortedTodos() {
+                let list = [...this.todos];
+                if (this.sortBy === '智能') {
+                    list.sort((a,b) => {
+                        if(a.fixedStart && !b.fixedStart) return -1; if(!a.fixedStart && b.fixedStart) return 1;
+                        if(!a.deadline && b.deadline) return 1; if(a.deadline && !b.deadline) return -1;
+                        if(a.deadline && b.deadline) return new Date(a.deadline) - new Date(b.deadline);
+                        return a.duration - b.duration;
+                    });
+                }
+                return list;
+            },
+            computedSchedule() {
+                const simDate = new Date(this.currentDateStr); const dayOfWeek = simDate.getDay(); let schedule = []; 
+                let dayStart = this.timeToMin(this.sleepSettings.end); let dayEnd = this.timeToMin(this.sleepSettings.start);
+                if(dayEnd < dayStart) dayEnd += 24 * 60; 
+
+                let occupiedSlots = [];
+                this.fixedTasks.forEach(t => { if (!t.days || t.days.includes(dayOfWeek)) { let start = this.timeToMin(t.start); let end = this.timeToMin(t.end); let buffer = t.buffer || 0; occupiedSlots.push({ name: t.name, type: 'FIXED', startMin: start, endMin: end, buffer: buffer }); } });
+                this.todos.filter(t => t.fixedStart && t.fixedEnd).forEach(t => { let start = this.timeToMin(t.fixedStart); let end = this.timeToMin(t.fixedEnd); let buffer = t.buffer || 0; occupiedSlots.push({ ...t, type: 'TODO', isFixedTimeTodo: true, startMin: start, endMin: end, buffer: buffer }); });
+                occupiedSlots.sort((a,b) => (a.startMin - a.buffer) - (b.startMin - b.buffer));
+
+                let cursor = dayStart; let autoTodos = this.todos.filter(t => !t.fixedStart); let todoIndex = 0;
+
+                while (cursor < dayEnd) {
+                    let nextOccupied = occupiedSlots.find(t => (t.startMin - t.buffer) >= cursor);
+                    let ongoing = occupiedSlots.find(t => cursor >= (t.startMin - t.buffer) && cursor < t.endMin);
+
+                    if (ongoing) {
+                        if (cursor < ongoing.startMin) { schedule.push({ isBuffer: true, forTask: ongoing.name, startTime: this.minToTime(cursor), endTime: this.minToTime(ongoing.startMin), duration: ((ongoing.startMin - cursor)/60).toFixed(1) }); cursor = ongoing.startMin; } 
+                        else { schedule.push({ ...ongoing, startTime: this.minToTime(Math.max(ongoing.startMin, dayStart)), endTime: this.minToTime(Math.min(ongoing.endMin, dayEnd)), duration: ((Math.min(ongoing.endMin, dayEnd) - Math.max(ongoing.startMin, dayStart)) / 60).toFixed(1) }); cursor = Math.min(ongoing.endMin, dayEnd); }
+                        continue;
+                    }
+
+                    let freeUntil = nextOccupied ? (nextOccupied.startMin - nextOccupied.buffer) : dayEnd; let freeDuration = freeUntil - cursor;
+                    if (freeDuration >= 30) {
+                        if (todoIndex < autoTodos.length) {
+                            let t = autoTodos[todoIndex]; let tDurMin = t.duration * 60; let tBuffer = t.buffer || 0; let totalNeed = tDurMin + tBuffer;
+                            if (freeDuration >= totalNeed) {
+                                if (tBuffer > 0) { schedule.push({ isBuffer: true, forTask: t.name, startTime: this.minToTime(cursor), endTime: this.minToTime(cursor + tBuffer), duration: (tBuffer/60).toFixed(1) }); cursor += tBuffer; }
+                                let isUrgent = false; if(t.deadline) { const diff = (new Date(t.deadline) - new Date(this.currentDateStr)) / 86400000; if(diff <= 1) isUrgent = true; }
+                                schedule.push({ ...t, startTime: this.minToTime(cursor), endTime: this.minToTime(cursor + tDurMin), type: 'TODO', isUrgent: isUrgent, duration: (tDurMin / 60).toFixed(1) }); cursor += tDurMin; todoIndex++;
+                            } else { schedule.push({ name: '自由', startTime: this.minToTime(cursor), endTime: this.minToTime(freeUntil), type: 'FREE', duration: ((freeUntil - cursor)/60).toFixed(1) }); cursor = freeUntil; }
+                        } else { schedule.push({ name: '自由', startTime: this.minToTime(cursor), endTime: this.minToTime(freeUntil), type: 'FREE', duration: ((freeUntil - cursor)/60).toFixed(1) }); cursor = freeUntil; }
+                    } else { cursor = freeUntil; }
+                }
+                return schedule;
+            },
+            totalFreeTime() { return this.computedSchedule.filter(i=>i.type==='FREE').reduce((a,c)=>a+parseFloat(c.duration),0).toFixed(1); },
+            stats() { return { totalHours: this.history.reduce((a,c)=>a+parseFloat(c.duration),0).toFixed(1), totalTasks: this.history.length } }
+        },
+        methods: {
+            addCategory() { const name = prompt("输入新分类:"); if (name && !this.categories.includes(name)) { this.categories.push(name); this.newTodo.category = name; } },
+            addTodo() { if(this.newTodo.name) { if(this.timeMode === 'fixed' && (!this.newTodo.fixedStart || !this.newTodo.fixedEnd)) { alert("请填写时间！"); return; } this.todos.push({ id: Date.now(), ...this.newTodo, duration: this.timeMode==='fixed' ? ((this.timeToMin(this.newTodo.fixedEnd)-this.timeToMin(this.newTodo.fixedStart))/60).toFixed(1) : this.newTodo.duration, subtasks: JSON.parse(JSON.stringify(this.newTodo.subtasks)) }); this.newTodo.name = ''; this.newTodo.subtasks = []; this.newTodo.fixedStart = ''; this.newTodo.fixedEnd = ''; this.showInput = false; } },
+            addFixedTask() { if(this.newFixed.name && this.newFixed.start && this.newFixed.end) { if(this.newFixed.days.length === 0) this.newFixed.days = [0,1,2,3,4,5,6]; this.fixedTasks.push(JSON.parse(JSON.stringify(this.newFixed))); this.newFixed.name = ''; } },
+            
+            addWish() { if(this.newWish.name) { this.wishlist.push({ id: Date.now(), name: this.newWish.name, category: this.newWish.category }); this.newWish.name = ''; } },
+            removeWish(id) { if(confirm('删除?')) this.wishlist = this.wishlist.filter(w => w.id !== id); },
+            getWishesByCategory(cat) { return this.wishlist.filter(w => w.category === cat); },
+            promoteToTodo(wish) { 
+                const dur = prompt(`要把 "${wish.name}" 加入今日计划吗？\n预计耗时(小时):`, "2"); 
+                if(dur) { 
+                    this.todos.push({ id: Date.now(), name: wish.name, category: '🎮 娱乐', duration: parseFloat(dur), buffer: 0, deadline: '', subtasks: [], fixedStart: '', fixedEnd: '' }); 
+                    this.currentTab = 'schedule'; 
+                } 
+            },
+
+            startFocus(todo) { this.focusMode.active = true; this.focusMode.taskName = todo.name; this.focusMode.timeLeft = 25 * 60; this.focusMode.timer = setInterval(() => { this.focusMode.timeLeft--; if(this.focusMode.timeLeft <= 0) this.stopFocus(true); }, 1000); },
+            startFocusFromSchedule(item) { const todo = this.todos.find(t=>t.id === item.id); if(todo) this.startFocus(todo); },
+            stopFocus(completed) { clearInterval(this.focusMode.timer); this.focusMode.active = false; if(completed) { if(confirm('完成任务？')) { const todo = this.todos.find(t => t.name === this.focusMode.taskName); if(todo) this.completeTask(todo); } else { this.history.unshift({ name: this.focusMode.taskName + "(专注)", duration: 0.4, completedAt: new Date().toISOString() }); } } },
+            formatTime(seconds) { const m = Math.floor(seconds / 60).toString().padStart(2,'0'); const s = (seconds % 60).toString().padStart(2,'0'); return `${m}:${s}`; },
+            toggleFixedDay(idx) { const i = this.newFixed.days.indexOf(idx); if(i > -1) this.newFixed.days.splice(i, 1); else this.newFixed.days.push(idx); this.newFixed.days.sort(); },
+            formatDays(days) { if(!days || days.length === 7) return '每天'; return days.map(d => this.weekDays[d]).join(' '); },
+            addHabit() { if(this.newHabit.name) { this.habits.push({ id: Date.now(), name: this.newHabit.name, icon: this.newHabit.icon || '✨', logs: [] }); this.showAddHabit = false; } },
+            toggleHabit(habit) { const today = this.currentDateStr; if (habit.logs.includes(today)) habit.logs = habit.logs.filter(d => d !== today); else habit.logs.push(today); },
+            isHabitDoneToday(habit) { return habit.logs.includes(this.currentDateStr); },
+            
+            renderCharts() {
+                if(window.catChartInstance) window.catChartInstance.destroy(); if(window.trendChartInstance) window.trendChartInstance.destroy();
+                const catMap = {}; this.history.forEach(h => { const c = h.category || '未分类'; catMap[c] = (catMap[c] || 0) + parseFloat(h.duration); });
+                const ctx1 = document.getElementById('categoryChart'); window.catChartInstance = new Chart(ctx1, { type: 'doughnut', data: { labels: Object.keys(catMap).length?Object.keys(catMap):['无'], datasets: [{ data: Object.keys(catMap).length?Object.values(catMap):[1], backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#94a3b8'] }] } });
+                const trendLabels = [], trendData = []; const baseDate = new Date(this.currentDateStr);
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date(baseDate); d.setDate(baseDate.getDate() - i);
+                    const m = (d.getMonth()+1).toString().padStart(2,'0'), day = d.getDate().toString().padStart(2,'0');
+                    trendLabels.push(`${m}-${day}`); const full = `${d.getFullYear()}-${m}-${day}`;
+                    trendData.push(this.history.filter(h => h.completedAt && h.completedAt.startsWith(full)).reduce((a,c)=>a+parseFloat(c.duration),0));
+                }
+                const ctx2 = document.getElementById('trendChart'); window.trendChartInstance = new Chart(ctx2, { type: 'bar', data: { labels: trendLabels, datasets: [{ label: '时长(h)', data: trendData, backgroundColor: '#6366f1', borderRadius: 4 }] }, options: { scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false } });
+            },
+
+            completeTask(todo) { this.todos = this.todos.filter(t => t.id !== todo.id); this.history.unshift({ name: todo.name, category: todo.category, duration: todo.duration, completedAt: new Date().toISOString() }); },
+            completeTaskFromSchedule(item) { const t = this.todos.find(i => i.id === item.id); if(t) this.completeTask(t); },
+            removeTodo(id) { this.todos = this.todos.filter(t => t.id !== id); },
+            removeFixed(idx) { this.fixedTasks.splice(idx, 1); },
+            timeToMin(s) { if(!s) return 0; const [h, m] = s.split(':'); return h*60 + m*1; },
+            minToTime(m) { let h = Math.floor(m/60), min = Math.floor(m%60); if(h>=24) h-=24; return `${h.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`; },
+            
+            saveData() { localStorage.setItem('lifeOS_ios_v1', JSON.stringify(this.$data)); },
+            loadData() {
+                const d = localStorage.getItem('lifeOS_ios_v1') || localStorage.getItem('lifeOS_v5_3') || localStorage.getItem('lifeOS_v5_2') || localStorage.getItem('lifeOS_v5') || localStorage.getItem('lifeRhythm_v4'); 
+                if(d) {
+                    const parsed = JSON.parse(d);
+                    this.fixedTasks = parsed.fixedTasks || []; this.todos = parsed.todos || []; this.habits = parsed.habits || []; 
+                    this.history = parsed.history || []; this.wishlist = parsed.wishlist || []; this.categories = parsed.categories || this.categories;
+                    if(parsed.sleepSettings) this.sleepSettings = parsed.sleepSettings;
+                }
+            },
+            exportData() { const s = JSON.stringify(this.$data); const blob = new Blob([s], {type: "application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `backup_ios.json`; a.click(); },
+            importData(e) { const r = new FileReader(); r.onload = (evt) => { Object.assign(this.$data, JSON.parse(evt.target.result)); alert('恢复成功!'); }; r.readAsText(e.target.files[0]); },
+            resetData() { if(confirm('⚠️ 清空数据？')) { localStorage.removeItem('lifeOS_ios_v1'); location.reload(); } }
+        }
+    }).mount('#app')
+</script>
+</body>
+</html>
